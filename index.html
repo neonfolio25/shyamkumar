@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Animated Rainbow Flower</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            font-family: 'Arial', sans-serif;
+            overflow-x: hidden;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            text-align: center;
+            width: 100%;
+            max-width: 900px;
+        }
+
+        .controls {
+            margin-bottom: 30px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, #8B5CF6, #EC4899);
+            color: white;
+        }
+
+        .btn-start:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+        }
+
+        .btn-start:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-reset {
+            background: linear-gradient(135deg, #6B7280, #374151);
+            color: white;
+        }
+
+        .btn-reset:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(107, 114, 128, 0.4);
+        }
+
+        .canvas-container {
+            width: 100%;
+            max-width: 800px;
+            aspect-ratio: 1;
+            background: #000;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 
+                0 0 50px rgba(139, 92, 246, 0.2),
+                0 0 100px rgba(236, 72, 153, 0.1);
+            position: relative;
+        }
+
+        #flowerCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .title {
+            margin-top: 30px;
+            font-size: 28px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #A855F7, #EC4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            margin-top: 10px;
+            color: #9CA3AF;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .title {
+                font-size: 24px;
+            }
+            
+            .btn {
+                padding: 10px 20px;
+                font-size: 14px;
+            }
+        }
+
+        .loading-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #A855F7;
+            font-size: 18px;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(168, 85, 247, 0.5);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .loading-text.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="controls">
+            <button id="startBtn" class="btn btn-start">Start Animation</button>
+            <button id="resetBtn" class="btn btn-reset">Reset</button>
+        </div>
+        
+        <div class="canvas-container">
+            <canvas id="flowerCanvas"></canvas>
+            <div id="loadingText" class="loading-text">Drawing magical petals...</div>
+        </div>
+        
+        <h1 class="title">Animated Rainbow Flower</h1>
+        <p class="subtitle">
+            Watch as each petal is drawn with vibrant rainbow gradients and neon glow effects.<br>
+            A mesmerizing mandala created with pure HTML5 Canvas.
+        </p>
+    </div>
+
+    <script>
+        class AnimatedFlower {
+            constructor() {
+                this.canvas = document.getElementById('flowerCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.startBtn = document.getElementById('startBtn');
+                this.resetBtn = document.getElementById('resetBtn');
+                this.loadingText = document.getElementById('loadingText');
+                
+                this.PETAL_COUNT = 24;
+                this.PETAL_LENGTH = 150;
+                this.PETAL_WIDTH = 40;
+                
+                this.rainbowColors = [
+                    '#FF0000', '#FF4500', '#FFD700', '#32CD32',
+                    '#00CED1', '#0000FF', '#8A2BE2', '#FF1493'
+                ];
+                
+                this.petals = [];
+                this.animationId = null;
+                this.isAnimating = false;
+                
+                this.init();
+            }
+
+            init() {
+                this.setupCanvas();
+                this.setupEventListeners();
+                this.clearCanvas();
+                
+                window.addEventListener('resize', () => this.setupCanvas());
+            }
+
+            setupCanvas() {
+                const container = this.canvas.parentElement;
+                const size = Math.min(container.clientWidth, container.clientHeight, 800);
+                
+                this.canvas.width = size;
+                this.canvas.height = size;
+                
+                this.centerX = size / 2;
+                this.centerY = size / 2;
+                this.scale = size / 800;
+            }
+
+            setupEventListeners() {
+                this.startBtn.addEventListener('click', () => this.startAnimation());
+                this.resetBtn.addEventListener('click', () => this.resetAnimation());
+            }
+
+            createRadialGradient(centerX, centerY, radius, colors) {
+                const gradient = this.ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
+                colors.forEach((color, index) => {
+                    gradient.addColorStop(index / (colors.length - 1), color);
+                });
+                return gradient;
+            }
+
+            drawPetal(angle, progress, colors) {
+                const adjustedLength = this.PETAL_LENGTH * this.scale;
+                const adjustedWidth = this.PETAL_WIDTH * this.scale;
+
+                this.ctx.save();
+                this.ctx.translate(this.centerX, this.centerY);
+                this.ctx.rotate(angle);
+
+                // Create rainbow gradient
+                const gradient = this.createRadialGradient(0, 0, adjustedLength, colors);
+                
+                // Set up glow effect
+                this.ctx.shadowColor = colors[Math.floor(colors.length / 2)];
+                this.ctx.shadowBlur = 25 * this.scale;
+                this.ctx.shadowOffsetX = 0;
+                this.ctx.shadowOffsetY = 0;
+
+                this.ctx.beginPath();
+                
+                // Create elegant petal shape using bezier curves
+                const controlPoint1X = adjustedLength * 0.3;
+                const controlPoint1Y = -adjustedWidth * 0.5;
+                const controlPoint2X = adjustedLength * 0.7;
+                const controlPoint2Y = -adjustedWidth * 0.3;
+                const endX = adjustedLength * progress;
+                const endY = 0;
+                
+                const controlPoint3X = adjustedLength * 0.7;
+                const controlPoint3Y = adjustedWidth * 0.3;
+                const controlPoint4X = adjustedLength * 0.3;
+                const controlPoint4Y = adjustedWidth * 0.5;
+
+                // Draw petal shape
+                this.ctx.moveTo(0, 0);
+                this.ctx.bezierCurveTo(
+                    controlPoint1X * progress, controlPoint1Y * progress,
+                    controlPoint2X * progress, controlPoint2Y * progress,
+                    endX, endY
+                );
+                
+                this.ctx.bezierCurveTo(
+                    controlPoint3X * progress, controlPoint3Y * progress,
+                    controlPoint4X * progress, controlPoint4Y * progress,
+                    0, 0
+                );
+
+                this.ctx.fillStyle = gradient;
+                this.ctx.fill();
+
+                // Add inner glow
+                this.ctx.globalCompositeOperation = 'screen';
+                this.ctx.shadowBlur = 15 * this.scale;
+                this.ctx.fill();
+                this.ctx.globalCompositeOperation = 'source-over';
+
+                this.ctx.restore();
+            }
+
+            drawHeart(x, y, size, color, progress = 1) {
+                this.ctx.save();
+                this.ctx.translate(x, y);
+                this.ctx.scale(size * this.scale * progress, size * this.scale * progress);
+
+                // Set up glow effect
+                this.ctx.shadowColor = color;
+                this.ctx.shadowBlur = 20 * this.scale;
+                this.ctx.shadowOffsetX = 0;
+                this.ctx.shadowOffsetY = 0;
+
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 15);
+                
+                // Left curve
+                this.ctx.bezierCurveTo(-15, -5, -35, -5, -35, 15);
+                this.ctx.bezierCurveTo(-35, 25, -15, 35, 0, 50);
+                
+                // Right curve  
+                this.ctx.bezierCurveTo(15, 35, 35, 25, 35, 15);
+                this.ctx.bezierCurveTo(35, -5, 15, -5, 0, 15);
+
+                this.ctx.fillStyle = color;
+                this.ctx.fill();
+
+                // Add inner glow
+                this.ctx.globalCompositeOperation = 'screen';
+                this.ctx.shadowBlur = 10 * this.scale;
+                this.ctx.fill();
+                this.ctx.globalCompositeOperation = 'source-over';
+
+                this.ctx.restore();
+            }
+
+            easeInOutCubic(t) {
+                return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+            }
+
+            clearCanvas() {
+                this.ctx.fillStyle = '#000000';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+
+            startAnimation() {
+                if (this.isAnimating) return;
+                
+                this.isAnimating = true;
+                this.startBtn.disabled = true;
+                this.startBtn.textContent = 'Drawing...';
+                // this.loadingText.classList.add('show');
+                
+                // Initialize petals
+                this.petals = [];
+                for (let i = 0; i < this.PETAL_COUNT; i++) {
+                    const angle = (i / this.PETAL_COUNT) * Math.PI * 2;
+                    const colorStartIndex = Math.floor((i / this.PETAL_COUNT) * this.rainbowColors.length);
+                    const colors = [
+                        this.rainbowColors[colorStartIndex % this.rainbowColors.length],
+                        this.rainbowColors[(colorStartIndex + 1) % this.rainbowColors.length],
+                        this.rainbowColors[(colorStartIndex + 2) % this.rainbowColors.length],
+                        this.rainbowColors[(colorStartIndex + 3) % this.rainbowColors.length]
+                    ];
+                    
+                    this.petals.push({
+                        angle,
+                        progress: 0,
+                        colors
+                    });
+                }
+
+                // Initialize hearts 
+                this.hearts = [
+                    { x: this.centerX + 200 * this.scale, y: this.centerY - 100 * this.scale, color: '#FF1493', progress: 0 },
+                    { x: this.centerX - 180 * this.scale, y: this.centerY + 120 * this.scale, color: '#FF4500', progress: 0 },
+                    { x: this.centerX + 50 * this.scale, y: this.centerY + 180 * this.scale, color: '#8A2BE2', progress: 0 }
+                ];
+
+                const startTime = Date.now();
+                const animationDuration = 5000;
+                const petalDelay = animationDuration / this.PETAL_COUNT;
+
+                const animate = () => {
+                    const currentTime = Date.now();
+                    const elapsed = currentTime - startTime;
+
+                    this.clearCanvas();
+
+                    // Update and draw petals
+                    this.petals.forEach((petal, index) => {
+                        const petalStartTime = index * petalDelay;
+                        const petalElapsed = elapsed - petalStartTime;
+                        
+                        if (petalElapsed > 0) {
+                            const petalDuration = 1200;
+                            const rawProgress = Math.min(petalElapsed / petalDuration, 1);
+                            petal.progress = this.easeInOutCubic(rawProgress);
+                            
+                            this.drawPetal(petal.angle, petal.progress, petal.colors);
+                        }
+                    });
+
+                    // Update and draw hearts after petals complete
+                    const heartStartTime = animationDuration;
+                    if (elapsed > heartStartTime) {
+                        this.hearts.forEach((heart, index) => {
+                            const heartDelay = index * 300;
+                            const heartElapsed = elapsed - heartStartTime - heartDelay;
+                            
+                            if (heartElapsed > 0) {
+                                const heartDuration = 800;
+                                const rawProgress = Math.min(heartElapsed / heartDuration, 1);
+                                heart.progress = this.easeInOutCubic(rawProgress);
+                                
+                                this.drawHeart(heart.x, heart.y, 0.8, heart.color, heart.progress);
+                            }
+                        });
+                    }
+
+                    // Continue animation
+                    if (elapsed < animationDuration + 2400) {
+                        this.animationId = requestAnimationFrame(animate);
+                    } else {
+                        this.startPulseAnimation();
+                    }
+                };
+
+                animate();
+            }
+
+            startPulseAnimation() {
+                // this.loadingText.classList.remove('show');
+                this.startBtn.textContent = 'Start Animation';
+                this.startBtn.disabled = false;
+                
+                const pulseStart = Date.now();
+                
+                const pulse = () => {
+                    const pulseTime = Date.now() - pulseStart;
+                    const pulseValue = (Math.sin(pulseTime * 0.003) + 1) * 0.5;
+                    
+                    this.clearCanvas();
+                    
+                    this.petals.forEach((petal) => {
+                        this.ctx.save();
+                        this.ctx.globalAlpha = 0.6 + pulseValue * 0.4;
+                        this.drawPetal(petal.angle, 1, petal.colors);
+                        this.ctx.restore();
+                    });
+                    
+                    // Draw hearts with pulse effect
+                    this.hearts.forEach((heart) => {
+                        this.ctx.save();
+                        this.ctx.globalAlpha = 0.7 + pulseValue * 0.3;
+                        this.drawHeart(heart.x, heart.y, 0.8, heart.color, 1);
+                        this.ctx.restore();
+                    });
+                    
+                    if (this.isAnimating) {
+                        this.animationId = requestAnimationFrame(pulse);
+                    }
+                };
+                
+                pulse();
+            }
+
+            resetAnimation() {
+                this.isAnimating = false;
+                
+                if (this.animationId) {
+                    cancelAnimationFrame(this.animationId);
+                    this.animationId = null;
+                }
+                
+                this.startBtn.disabled = false;
+                this.startBtn.textContent = 'Start Animation';
+                this.loadingText.classList.remove('show');
+                
+                this.clearCanvas();
+                this.petals = [];
+            }
+        }
+
+        // Initialize the flower animation when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new AnimatedFlower();
+        });
+    </script>
+</body>
+</html>
